@@ -1,0 +1,41 @@
+name: Check site performance
+
+on:
+  schedule:
+    # 18:00 UTC every day — a few hours after the generator runs, so a
+    # freshly-published site has had time to pick up a visit or two
+    - cron: "0 18 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check GoatCounter stats and notify on new milestones
+        env:
+          GOATCOUNTER_CODE: ${{ secrets.GOATCOUNTER_CODE }}
+          GOATCOUNTER_API_TOKEN: ${{ secrets.GOATCOUNTER_API_TOKEN }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node check-performance.js
+
+      - name: Rebuild gallery with latest visitor counts
+        run: node publish-site.js --index-only
+
+      - name: Commit updated stats
+        run: |
+          git config user.name "site-bot"
+          git config user.email "site-bot@users.noreply.github.com"
+          git add performance.json performance-state.json index.html
+          git diff --cached --quiet || git commit -m "Update performance stats"
+          git push
