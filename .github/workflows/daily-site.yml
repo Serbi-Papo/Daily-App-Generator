@@ -1,0 +1,85 @@
+name: Generate daily site
+
+on:
+  schedule:
+    # 09:00 UTC every day — edit to change the time (cron is always UTC)
+    - cron: "0 9 * * *"
+  workflow_dispatch: {} # lets you also trigger it manually from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ steps.decide.outputs.env_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Generate, self-review, and decide
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOATCOUNTER_CODE: ${{ secrets.GOATCOUNTER_CODE }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node generate-site.js
+
+      - name: Decide which environment gates publishing
+        id: decide
+        run: |
+          if [ "$(cat .build-output/needs-review.txt)" = "true" ]; then
+            echo "Flagged for human review."
+            echo "env_name=manual-review" >> "$GITHUB_OUTPUT"
+          else
+            echo "Passed self-review — publishing automatically."
+            echo "env_name=auto-publish" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: .build-output
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    # If build decided "manual-review", this job pauses here until someone
+    # approves it in the Actions tab (see README for the one-time setup of
+    # that environment's required reviewers). "auto-publish" has no
+    # protection rules, so it proceeds immediately.
+    environment: ${{ needs.build.outputs.env_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-output
+          path: .build-output
+
+      - name: Merge into sites/, rebuild index and feed
+        run: node publish-site.js
+
+      - name: Commit and push
+        run: |
+          git config user.name "site-bot"
+          git config user.email "site-bot@users.noreply.github.com"
+          git add sites index.html feed.xml reddit-drafts
+          git diff --cached --quiet || git commit -m "Publish site for $(date -u +%Y-%m-%d)"
+          git push
+
+      - name: Announce the new site
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node notify-published.js
