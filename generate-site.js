@@ -11,7 +11,7 @@
 
 import fs from "fs";
 import path from "path";
-import { callGemini, parseJsonLoose } from "./lib/gemini.js";
+import { callGemini, callGeminiJson } from "./lib/gemini.js";
 import { staticValidate } from "./lib/validate.js";
 import { notifyDiscord, notifyTelegram } from "./lib/notify.js";
 import { gatherHnSignals } from "./lib/hn.js";
@@ -22,10 +22,23 @@ const CANDIDATE_COUNT = 5;             // how many ideas to research each run
 const IDEA_CONFIDENCE_THRESHOLD = 65;  // below this, a human reviews before publish
 const DESIGN_SCORE_THRESHOLD = 7;      // out of 10
 const MAX_REPAIR_ATTEMPTS = 2;
+const HTML_MAX_OUTPUT_TOKENS = 8192;   // headroom so a styled page doesn't get cut off
 // --------------------------------------------------------------------------
 
 const SITES_DIR = path.join(process.cwd(), "sites");
 const OUT_DIR = path.join(process.cwd(), ".build-output");
+
+// Runs a labeled stage so a failure's log clearly says which step broke,
+// instead of a bare "exit code 1" with no context.
+async function stage(name, fn) {
+  console.log(`\n=== ${name} ===`);
+  try {
+    return await fn();
+  } catch (err) {
+    console.error(`✗ Failed during "${name}": ${err.message}`);
+    throw err;
+  }
+}
 
 function loadPastTitles() {
   if (!fs.existsSync(SITES_DIR)) return [];
@@ -60,8 +73,10 @@ Return ONLY a JSON array, nothing else:
 ]
 `.trim();
 
-  const raw = await callGemini(prompt, { json: true });
-  const candidates = parseJsonLoose(raw);
+  const candidates = await callGeminiJson(prompt);
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    throw new Error(`Expected a non-empty JSON array of candidates, got: ${JSON.stringify(candidates).slice(0, 200)}`);
+  }
   return candidates.map(c => ({ ...c, slug: slugify(c.slug || c.title) }));
 }
 
@@ -76,7 +91,7 @@ async function researchCandidates(candidates) {
         `  "${c.title}": ${signals.discussionHits} HN mentions, ${signals.showHnHits} prior Show HN launches`
       );
     } catch (err) {
-      console.warn(`  HN lookup failed for "${c.title}": ${err.message}`);
+      console.warn(`  HN lookup failed for "${c.title}" (continuing without it): ${err.message}`);
       results.push({ ...c, signals: null });
     }
   }
@@ -136,8 +151,10 @@ inflate it. risk_flags: anything a human should sanity-check (empty array if
 genuinely none).
 `.trim();
 
-  const raw = await callGemini(prompt, { json: true });
-  const idea = parseJsonLoose(raw);
+  const idea = await callGeminiJson(prompt);
+  if (!idea || typeof idea !== "object" || !idea.title) {
+    throw new Error(`Expected an idea object with a title, got: ${JSON.stringify(idea).slice(0, 200)}`);
+  }
   idea.slug = slugify(idea.slug || idea.title);
   idea.confidence_score = Number(idea.confidence_score) || 0;
   idea.risk_flags = Array.isArray(idea.risk_flags) ? idea.risk_flags : [];
@@ -175,7 +192,7 @@ Technical requirements:
 - Return ONLY the raw HTML, no markdown code fences, no commentary.
 `.trim();
 
-  const raw = await callGemini(prompt);
+  const raw = await callGemini(prompt, { maxOutputTokens: HTML_MAX_OUTPUT_TOKENS });
   return raw.replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
 }
 
@@ -212,8 +229,7 @@ issues: short, specific, actionable strings a developer could act on
 directly. Empty array if genuinely none.
 `.trim();
 
-  const raw = await callGemini(prompt, { json: true });
-  const parsed = parseJsonLoose(raw);
+  const parsed = await callGeminiJson(prompt);
   return {
     designScore: Number(parsed.design_score) || 0,
     severity: parsed.severity || "none",
@@ -237,7 +253,7 @@ ${html}
 Return ONLY the raw corrected HTML, no markdown fences, no commentary.
 `.trim();
 
-  const raw = await callGemini(prompt);
+  const raw = await callGemini(prompt, { maxOutputTokens: HTML_MAX_OUTPUT_TOKENS });
   return raw.replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
 }
 
@@ -275,24 +291,21 @@ function embedAnalytics(html) {
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
-  console.log(`Brainstorming ${CANDIDATE_COUNT} candidate ideas...`);
-  const candidates = await generateCandidates(loadPastTitles());
+  const candidates = await stage(`Brainstorming ${CANDIDATE_COUNT} candidate ideas`, () =>
+    generateCandidates(loadPastTitles())
+  );
 
-  console.log("Pulling live Hacker News data for each candidate...");
-  const researched = await researchCandidates(candidates);
+  const researched = await stage("Researching candidates on Hacker News", () => researchCandidates(candidates));
 
-  console.log("Picking the best-supported idea...");
-  const idea = await evaluateAndPick(researched);
-  console.log(`Idea: ${idea.title} (confidence ${idea.confidence_score}/100)`);
+  const idea = await stage("Picking the best-supported idea", () => evaluateAndPick(researched));
+  console.log(`  Idea: ${idea.title} (confidence ${idea.confidence_score}/100)`);
 
-  console.log("Building the site...");
-  let html = await generateHtml(idea);
+  let html = await stage("Building the site", () => generateHtml(idea));
 
   let review = { designScore: 0, severity: "major", issues: ["not yet reviewed"] };
   for (let attempt = 0; attempt <= MAX_REPAIR_ATTEMPTS; attempt++) {
     const staticCheck = staticValidate(html);
-    console.log(`Self-review pass ${attempt + 1}...`);
-    const semantic = await reviewHtml(html, idea);
+    const semantic = await stage(`Self-review pass ${attempt + 1}`, () => reviewHtml(html, idea));
     review = {
       designScore: semantic.designScore,
       severity: staticCheck.ok ? semantic.severity : "major",
@@ -304,8 +317,8 @@ async function main() {
 
     if (passes || attempt === MAX_REPAIR_ATTEMPTS) break;
 
-    console.log(`Found ${review.issues.length} issue(s), attempting a fix...`);
-    html = await repairHtml(html, review.issues, idea);
+    console.log(`  Found ${review.issues.length} issue(s), attempting a fix...`);
+    html = await stage(`Repair attempt ${attempt + 1}`, () => repairHtml(html, review.issues, idea));
   }
 
   html = embedAnalytics(html);
@@ -314,8 +327,7 @@ async function main() {
   const needsReview =
     !codeOk || idea.confidence_score < IDEA_CONFIDENCE_THRESHOLD || idea.risk_flags.length > 0;
 
-  console.log("Drafting a Reddit post for later manual sharing...");
-  const redditDraft = await generateRedditDraft(idea);
+  const redditDraft = await stage("Drafting a Reddit post", () => generateRedditDraft(idea));
 
   const dateSlug = `${todayStamp()}-${idea.slug}`;
   const meta = {
@@ -352,7 +364,7 @@ async function main() {
   fs.writeFileSync(path.join(OUT_DIR, "needs-review.txt"), String(needsReview));
   fs.writeFileSync(path.join(OUT_DIR, "summary.json"), JSON.stringify({ dateSlug, ...meta }, null, 2));
 
-  console.log(`Done. needs_review=${needsReview}`);
+  console.log(`\nDone. needs_review=${needsReview}`);
 
   if (needsReview) {
     const runUrl =
@@ -383,6 +395,6 @@ async function main() {
 }
 
 main().catch(err => {
-  console.error(err);
+  console.error("\nFATAL:", err.message);
   process.exit(1);
 });
