@@ -46,6 +46,7 @@ jobs:
         with:
           name: build-output
           path: .build-output
+          include-hidden-files: true
 
   publish:
     needs: build
