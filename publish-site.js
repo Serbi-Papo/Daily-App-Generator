@@ -26,6 +26,13 @@ function main() {
     return;
   }
 
+  if (!fs.existsSync(path.join(OUT_DIR, "date-slug.txt"))) {
+    console.error(
+      "FATAL: .build-output/date-slug.txt not found — the build artifact wasn't downloaded correctly. " +
+        "Check the 'download-artifact' step's log above this one."
+    );
+    process.exit(1);
+  }
   const dateSlug = fs.readFileSync(path.join(OUT_DIR, "date-slug.txt"), "utf8").trim();
 
   const siteDir = path.join(SITES_DIR, dateSlug);
@@ -51,7 +58,14 @@ function loadAllMeta() {
     .reverse()
     .map(dateSlug => {
       const metaPath = path.join(SITES_DIR, dateSlug, "meta.json");
-      const meta = fs.existsSync(metaPath) ? JSON.parse(fs.readFileSync(metaPath, "utf8")) : { title: dateSlug };
+      let meta = { title: dateSlug };
+      if (fs.existsSync(metaPath)) {
+        try {
+          meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+        } catch (err) {
+          console.warn(`Skipping malformed meta.json for ${dateSlug}: ${err.message}`);
+        }
+      }
       return { dateSlug, meta };
     });
 }
