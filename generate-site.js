@@ -190,6 +190,20 @@ Technical requirements:
   in the JS — not a placeholder.
 - Write real, specific copy. No "lorem ipsum" or "[placeholder]" text anywhere.
 - Return ONLY the raw HTML, no markdown code fences, no commentary.
+
+Security requirements (this is a public static file — treat all input as
+untrusted):
+- NEVER use eval(), new Function(), or setTimeout/setInterval with a string
+  argument.
+- If any user input (from a text field, URL params, etc.) is ever displayed
+  back on the page, insert it via textContent or an explicit HTML-escaping
+  function — never via innerHTML/insertAdjacentHTML with a raw string.
+- Never embed any API key, token, or credential in the page, even a fake
+  placeholder one — this file is public source code.
+- Any link that opens in a new tab (target="_blank") must include
+  rel="noopener noreferrer".
+- Never build a URL for fetch/navigation by concatenating unescaped user
+  input into it.
 `.trim();
 
   const raw = await callGemini(prompt, { maxOutputTokens: HTML_MAX_OUTPUT_TOKENS });
@@ -213,6 +227,13 @@ Check specifically for: features that are listed but not actually implemented
 in the JS, broken or incomplete JS logic, leftover placeholder/lorem-ipsum
 text, poor color contrast or default/generic styling, non-responsive layout,
 missing viewport meta tag, and any leftover markdown fences.
+
+Also check specifically for these security issues, and treat any of them as
+"major" severity if found: eval() or new Function() usage; innerHTML or
+insertAdjacentHTML assigned from a variable/expression instead of a fixed
+string (potential XSS); any API key, token, or credential embedded in the
+page; target="_blank" links missing rel="noopener noreferrer"; building a
+URL by concatenating unescaped input into it.
 
 Return ONLY a JSON object:
 {
