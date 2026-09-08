@@ -1,0 +1,66 @@
+{
+  "title": "Recurring Expense Visualizer",
+  "slug": "recurring-expense-visualizer",
+  "date": "2026-09-08",
+  "description": "Convert weekly, monthly, and yearly subscriptions into a single unified breakdown of your true annual spending without creating an account.",
+  "features": [
+    "Interactive expense frequency converter across weekly, monthly, and annual totals",
+    "Visual category breakdown charts for quick spend analysis",
+    "Instant local browser data persistence with CSV/JSON export"
+  ],
+  "target_user": "Budget-conscious developers, freelancers, and remote workers tracking personal or business SaaS subscriptions.",
+  "why": {
+    "demand": "With 258 total mentions across Hacker News discussions, subscription cost calculation is a heavily discussed pain point within the target demographic.",
+    "competition": "10 prior Show HN launches signal a crowded market, but most existing tools require account creation or complex bank integrations rather than offering an instant, private, static browser utility.",
+    "existing_alternatives": [
+      "Sharkshimi",
+      "Expatria",
+      "Rocket Money",
+      "Manual spreadsheet trackers"
+    ],
+    "monetization": "Integrate non-intrusive affiliate links for business banking/budgeting software, a 'Buy Me a Coffee' donation button, and an email waitlist for a future native desktop menu bar app."
+  },
+  "confidence_score": 78,
+  "design_score": 2,
+  "risk_flags": [
+    "High competition volume with 10 prior Show HN launches",
+    "Low user retention as subscription auditing is typically a low-frequency task"
+  ],
+  "review_issues": [
+    "Missing closing </html> — output may be truncated.",
+    "The HTML document is truncated and cuts off abruptly inside the <style> block at line 470.",
+    "Missing HTML <body> content and markup for all dashboard components, forms, and tables.",
+    "Missing JavaScript logic entirely; interactive frequency converter (weekly/monthly/annual) is not implemented.",
+    "Missing chart rendering logic for visual category spend breakdowns.",
+    "Missing local storage persistence and CSV/JSON export functionality.",
+    "Missing closing </style>, </head>, and </html> tags."
+  ],
+  "needs_review": true,
+  "candidates_considered": [
+    {
+      "title": "Tap Tempo & Visual Metronome",
+      "hn_mentions": 0,
+      "hn_show_hn_launches": 0
+    },
+    {
+      "title": "Simple Fasting Clock",
+      "hn_mentions": 20,
+      "hn_show_hn_launches": 0
+    },
+    {
+      "title": "RPG Dice Roller & Stats Log",
+      "hn_mentions": 10,
+      "hn_show_hn_launches": 0
+    },
+    {
+      "title": "Recurring Expense Visualizer",
+      "hn_mentions": 258,
+      "hn_show_hn_launches": 10
+    },
+    {
+      "title": "Browser Teleprompter",
+      "hn_mentions": 2,
+      "hn_show_hn_launches": 0
+    }
+  ]
+}

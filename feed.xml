@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+  <title>A Website a Day</title>
+  <link>https://Serbi-Papo.github.io/Daily-App-Generator/</link>
+  <description>A new tiny AI-built app idea, automatically, every day.</description>
+  
+    <item>
+      <title>Recurring Expense Visualizer</title>
+      <link>https://Serbi-Papo.github.io/Daily-App-Generator/sites/2026-09-08-recurring-expense-visualizer/</link>
+      <guid>https://Serbi-Papo.github.io/Daily-App-Generator/sites/2026-09-08-recurring-expense-visualizer/</guid>
+      <description>Convert weekly, monthly, and yearly subscriptions into a single unified breakdown of your true annual spending without creating an account.</description>
+      <pubDate>Tue, 08 Sep 2026 00:00:00 GMT</pubDate>
+    </item>
+</channel>
+</rss>
